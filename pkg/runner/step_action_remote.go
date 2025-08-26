@@ -107,12 +107,17 @@ func (sar *stepActionRemote) prepareActionExecutor() common.Executor {
 		}
 
 		actionDir := fmt.Sprintf("%s/%s", sar.RunContext.ActionCacheDir(), safeFilename(sar.Step.Uses))
+
 		gitClone := stepActionRemoteNewCloneExecutor(git.NewGitCloneExecutorInput{
-			URL:         sar.remoteAction.CloneURL(),
-			Ref:         sar.remoteAction.Ref,
-			Dir:         actionDir,
-			Token:       github.Token,
-			OfflineMode: sar.RunContext.Config.ActionOfflineMode,
+			URL:                sar.remoteAction.CloneURL(),
+			BaseURL:            sar.remoteAction.URL,
+			RepoPath:           sar.remoteAction.CloneRepoPath(),
+			Ref:                sar.remoteAction.Ref,
+			Dir:                actionDir,
+			Token:              github.Token,
+			GitHubComToken:     sar.RunContext.Config.ReplaceGheActionTokenWithGithubCom,
+			OfflineMode:        sar.RunContext.Config.ActionOfflineMode,
+			TryGitHubComOnFail: sar.RunContext.Config.TryFromGithubComOnCloneFail,
 		})
 		var ntErr common.Executor
 		if err := gitClone(ctx); err != nil {
@@ -260,6 +265,10 @@ type remoteAction struct {
 
 func (ra *remoteAction) CloneURL() string {
 	return fmt.Sprintf("%s/%s/%s", ra.URL, ra.Org, ra.Repo)
+}
+
+func (ra *remoteAction) CloneRepoPath() string {
+	return fmt.Sprintf("%s/%s", ra.Org, ra.Repo)
 }
 
 func (ra *remoteAction) IsCheckout() bool {

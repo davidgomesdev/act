@@ -221,19 +221,47 @@ func findGitSlug(url string, githubInstance string) (string, string, error) {
 
 // NewGitCloneExecutorInput the input for the NewGitCloneExecutor
 type NewGitCloneExecutorInput struct {
-	URL         string
-	Ref         string
-	Dir         string
-	Token       string
-	OfflineMode bool
+	URL                string
+	BaseURL            string
+	RepoPath           string
+	Ref                string
+	Dir                string
+	Token              string
+	GitHubComToken     string
+	OfflineMode        bool
+	TryGitHubComOnFail bool
+}
+
+func (input *NewGitCloneExecutorInput) CloneForGitHubCom() NewGitCloneExecutorInput {
+	URL := fmt.Sprintf("https://github.com/%s", input.RepoPath)
+	token := input.GitHubComToken
+
+	return NewGitCloneExecutorInput{
+		URL:                URL,
+		BaseURL:            input.BaseURL,
+		RepoPath:           input.RepoPath,
+		Ref:                input.Ref,
+		Dir:                input.Dir,
+		Token:              token,
+		GitHubComToken:     input.GitHubComToken,
+		OfflineMode:        input.OfflineMode,
+		TryGitHubComOnFail: input.TryGitHubComOnFail,
+	}
+}
+
+func (input *NewGitCloneExecutorInput) isGitHubCom() bool {
+	return strings.HasPrefix(input.URL, "https://github.com/")
 }
 
 // CloneIfRequired ...
 func CloneIfRequired(ctx context.Context, refName plumbing.ReferenceName, input NewGitCloneExecutorInput, logger log.FieldLogger) (*git.Repository, error) {
+	URL := input.URL
+	token := input.Token
+
 	// If the remote URL has changed, remove the directory and clone again.
 	if r, err := git.PlainOpen(input.Dir); err == nil {
 		if remote, err := r.Remote("origin"); err == nil {
-			if len(remote.Config().URLs) > 0 && remote.Config().URLs[0] != input.URL {
+			if len(remote.Config().URLs) > 0 && remote.Config().URLs[0] != URL {
 				_ = os.RemoveAll(input.Dir)
 			}
 		}
@@ -254,19 +282,19 @@ func CloneIfRequired(ctx context.Context, refName plumbing.ReferenceName, input 
 		}
 
 		cloneOptions := git.CloneOptions{
-			URL:      input.URL,
+			URL:      URL,
 			Progress: progressWriter,
 		}
-		if input.Token != "" {
+		if token != "" {
 			cloneOptions.Auth = &http.BasicAuth{
 				Username: "token",
-				Password: input.Token,
+				Password: token,
 			}
 		}
 
 		r, err = git.PlainCloneContext(ctx, input.Dir, false, &cloneOptions)
 		if err != nil {
-			logger.Errorf("Unable to clone %v %s: %v", input.URL, refName, err)
+			logger.Errorf("Unable to clone %v %s: %v", URL, refName, err)
 			return nil, err
 		}
 
@@ -306,16 +334,29 @@ func NewGitCloneExecutor(input NewGitCloneExecutorInput) common.Executor {
 		cloneLock.Lock()
 		defer cloneLock.Unlock()
 
+		token := input.Token
 		refName := plumbing.ReferenceName(fmt.Sprintf("refs/heads/%s", input.Ref))
 		r, err := CloneIfRequired(ctx, refName, input, logger)
+
 		if err != nil {
-			return err
+			if input.isGitHubCom() || !input.TryGitHubComOnFail {
+				return err
+			}
+
+			logger.Infof("  failed, trying to clone using https://github.com/%s", input.RepoPath)
+
+			token = input.GitHubComToken
+			r, err = CloneIfRequired(ctx, refName, input.CloneForGitHubCom(), logger)
+
+			if err != nil {
+				return err
+			}
 		}
 
 		isOfflineMode := input.OfflineMode
 
 		// fetch latest changes
-		fetchOptions, pullOptions := gitOptions(input.Token)
+		fetchOptions, pullOptions := gitOptions(token)
 
 		if !isOfflineMode {
 			err = r.Fetch(&fetchOptions)

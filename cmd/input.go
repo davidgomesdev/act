@@ -54,6 +54,7 @@ type Input struct {
 	remoteName                         string
 	replaceGheActionWithGithubCom      []string
 	replaceGheActionTokenWithGithubCom string
+	tryFromGithubComOnCloneFail        bool
 	matrix                             []string
 	actionCachePath                    string
 	actionOfflineMode                  bool
