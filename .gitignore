@@ -20,6 +20,7 @@
 
 # Path for actions cache created when running tests
 pkg/runner/act/
+pkg/runner/testdata/cache/
 
 # act binary
 dist/local/act
@@ -32,3 +33,6 @@ unit-tests.xml
 
 # megalinter
 report/
+
+# git rebase
+.git-rewrite
