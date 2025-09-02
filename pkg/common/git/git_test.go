@@ -179,8 +179,8 @@ func TestGitFindRef(t *testing.T) {
 
 func TestGitCloneExecutor(t *testing.T) {
 	for name, tt := range map[string]struct {
-		Err      error
-		URL, Ref string
+		Err                         error
+		URL, BaseURL, RepoPath, Ref string
 	}{
 		"tag": {
 			Err: nil,
@@ -202,12 +202,22 @@ func TestGitCloneExecutor(t *testing.T) {
 			URL: "https://github.com/actions/checkout",
 			Ref: "5a4ac90", // v2
 		},
+		"github-com-fallover": {
+			Err:      nil,
+			URL:      "https://git.non-existing-enterprise.com/actions/checkout",
+			BaseURL:  "https://git.non-existing-enterprise.com",
+			RepoPath: "actions/checkout",
+			Ref:      "v5", // v2
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			clone := NewGitCloneExecutor(NewGitCloneExecutorInput{
-				URL: tt.URL,
-				Ref: tt.Ref,
-				Dir: testDir(t),
+				URL:                tt.URL,
+				BaseURL:            tt.BaseURL,
+				RepoPath:           tt.RepoPath,
+				Ref:                tt.Ref,
+				Dir:                testDir(t),
+				TryGitHubComOnFail: true,
 			})
 
 			err := clone(context.Background())
